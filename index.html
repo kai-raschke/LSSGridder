@@ -531,7 +531,7 @@
           <label>
             Patch mode
             <select id="patch-mode">
-              <option value="A">Mode A</option>
+              <option value="A">Mode A (All)</option>
               <option value="B">Mode B (4-neighbour)</option>
               <option value="C">Mode C (8-neighbour)</option>
               <option value="U">Fixed by Upload</option>
@@ -941,8 +941,40 @@
           }
           ctx.fillStyle = fillColor;
           ctx.fillRect(x, y, cellSize, cellSize);
+
           ctx.strokeStyle = "#2a3346";
-          ctx.strokeRect(x, y, cellSize, cellSize);
+          if (mode !== "patch") {
+            ctx.strokeRect(x, y, cellSize, cellSize);
+          } else {
+            const id = Number(value);
+            if (id <= 0) {
+              ctx.strokeRect(x, y, cellSize, cellSize);
+            } else {
+              const topSame = r > 0 && Number(data[r - 1][c]) === id;
+              const bottomSame = r < state.landuse.header.nrows - 1 && Number(data[r + 1][c]) === id;
+              const leftSame = c > 0 && Number(data[r][c - 1]) === id;
+              const rightSame = c < state.landuse.header.ncols - 1 && Number(data[r][c + 1]) === id;
+
+              ctx.beginPath();
+              if (!topSame) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + cellSize, y);
+              }
+              if (!bottomSame) {
+                ctx.moveTo(x, y + cellSize);
+                ctx.lineTo(x + cellSize, y + cellSize);
+              }
+              if (!leftSame) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + cellSize);
+              }
+              if (!rightSame) {
+                ctx.moveTo(x + cellSize, y);
+                ctx.lineTo(x + cellSize, y + cellSize);
+              }
+              ctx.stroke();
+            }
+          }
           ctx.fillStyle = getTextColorForBackground(fillColor);
       ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
     }
