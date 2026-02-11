@@ -1,0 +1,1880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LSSGridder</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #151923;
+      --panel-2: #1c2230;
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #6aa6ff;
+      --danger: #ff6b6b;
+      --ok: #38d39f;
+      --grid-border: #2c3446;
+      --cell-size: 26px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      padding: 16px 24px;
+      background: linear-gradient(90deg, #1a2040, #1b2638);
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #20283a;
+    }
+
+    .container {
+      padding: 16px 18px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .row {
+      display: grid;
+      gap: 12px;
+    }
+
+    .content-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .settings-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .preview-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid #1e2535;
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #landuse-card,
+    #patch-card,
+    #transition-card {
+      min-height: 400px;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .toolbar label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toolbar input,
+    .toolbar select,
+    .toolbar button,
+    textarea {
+      background: var(--panel-2);
+      border: 1px solid #2a3346;
+      color: var(--text);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .toolbar button {
+      cursor: pointer;
+      background: #2a3560;
+      transition: background 0.2s ease;
+    }
+
+    .toolbar button:hover {
+      background: #334079;
+    }
+
+    .toolbar button.secondary {
+      background: transparent;
+      border-color: #374258;
+    }
+
+    .toolbar button.secondary:hover {
+      background: #1c2230;
+    }
+
+    .drop-zone {
+      border: 1px dashed #33415c;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      flex-direction: column;
+      color: var(--muted);
+      font-size: 12px;
+      align-items: flex-start;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(106, 166, 255, 0.08);
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      border: 1px solid var(--grid-border);
+      border-radius: 8px;
+      background: #0d1018;
+      padding: 6px;
+      flex: 1;
+      width: 100%;
+      min-height: 300px;
+    }
+
+    canvas.grid-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 6px;
+      background: #0f141f;
+      cursor: crosshair;
+    }
+
+    .canvas-overlay {
+      position: absolute;
+      inset: 6px;
+      pointer-events: none;
+    }
+
+    .tooltip {
+      position: absolute;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: #1e2636;
+      border: 1px solid #2b354a;
+      font-size: 11px;
+      color: var(--text);
+      opacity: 0;
+      transform: translate(-50%, -120%);
+      transition: opacity 0.1s ease;
+      white-space: nowrap;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+    }
+
+    .popover {
+      position: absolute;
+      background: #1a2234;
+      border: 1px solid #2a3346;
+      border-radius: 8px;
+      padding: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      z-index: 5;
+      min-width: 140px;
+    }
+
+    .popover.visible {
+      display: flex;
+    }
+
+    .popover-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .popover-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+    }
+
+    .popover-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    .popover-actions {
+      margin-top: 8px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      border: 1px solid var(--grid-border);
+      border-radius: 8px;
+      background: #0d1018;
+      padding: 6px;
+    }
+
+    #genom-table {
+      border-collapse: collapse;
+      font-family: "Consolas", monospace;
+      font-size: 13px;
+      width: 100%;
+    }
+
+    #genom-table td, #genom-table th {
+      padding: 8px 12px;
+      border: 1px solid #2a3346;
+      text-align: center;
+      min-width: 40px;
+    }
+
+    #genom-table td:first-child {
+      font-weight: 600;
+      color: var(--muted);
+      background: #1a2234;
+      position: sticky;
+      left: 0;
+      border-right: 2px solid #2a3346;
+      text-align: left;
+    }
+
+    .matrix-wrapper {
+      overflow: auto;
+      border: 1px solid var(--grid-border);
+      border-radius: 8px;
+      background: #0d1018;
+      padding: 6px;
+      max-height: 360px;
+    }
+
+    table.matrix {
+      border-collapse: collapse;
+      font-size: 11px;
+      color: var(--text);
+    }
+
+    table.matrix th,
+    table.matrix td {
+      border: 1px solid var(--grid-border);
+      padding: 4px 6px;
+      text-align: center;
+      min-width: 26px;
+    }
+
+    table.matrix th {
+      background: #1a2030;
+      color: var(--muted);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    table.matrix th.row-header {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background: #1a2030;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .color-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+
+    .color-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #2a3346;
+      background: #141a25;
+      font-size: 12px;
+    }
+
+    .color-item input[type="color"] {
+      width: 28px;
+      height: 22px;
+      border: none;
+      background: transparent;
+    }
+
+    .color-item input[type="text"] {
+      width: 100%;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #233050;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .icon-button {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 6px;
+    }
+
+    .icon-button svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .checkbox input {
+      accent-color: var(--accent);
+    }
+
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: relative;
+      cursor: pointer;
+      width: 36px;
+      height: 20px;
+      background-color: #2a3346;
+      border-radius: 20px;
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #9aa3b2;
+      border-radius: 50%;
+      transition: .4s;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent);
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px var(--accent);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+      background-color: #fff;
+    }
+
+    @media (max-width: 1200px) {
+      .content-row,
+      .settings-row,
+      .preview-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>LSSGridder</header>
+  <div class="container">
+    <div class="row content-row">
+      <section class="card" id="landuse-card">
+        <h3>Landuse Map</h3>
+        <div class="toolbar">
+          <label>
+            Tool
+            <select id="landuse-tool">
+              <option value="pan">Pan</option>
+              <option value="select">Select</option>
+              <option value="pencil">Pencil</option>
+              <option value="fill">Fill</option>
+            </select>
+          </label>
+          <label>
+            Current landuse
+            <select id="current-landuse"></select>
+          </label>
+          <label class="checkbox">
+            <input type="checkbox" id="show-colors" checked />
+            Show colors
+          </label>
+          <button id="landuse-fill">Fill with current</button>
+        </div>
+        <div class="drop-zone" id="landuse-drop">
+          <input type="file" id="landuse-file" accept=".asc,.txt" style="display:none" />
+          Drop or click to upload landuse ASCII file
+          <span class="pill" id="landuse-dimensions">No map loaded</span>
+          <span class="pill" id="landuse-file-info">No file</span>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas class="grid-canvas" id="landuse-canvas"></canvas>
+          <div class="canvas-overlay">
+            <div class="tooltip" id="landuse-tooltip"></div>
+          </div>
+          <div class="popover" id="landuse-popover">
+            <div class="popover-header">
+              <span>Set type</span>
+              <button class="popover-close" id="landuse-popover-close">×</button>
+            </div>
+            <label>
+              <select id="landuse-popover-select"></select>
+            </label>
+            <div class="popover-actions">
+              <button id="landuse-popover-apply">Apply</button>
+            </div>
+          </div>
+        </div>
+        <div class="status" id="landuse-status"></div>
+      </section>
+
+      <section class="card" id="patch-card">
+        <h3>Patch ID Map</h3>
+        <div class="toolbar">
+          <label>
+            Patch mode
+            <select id="patch-mode">
+              <option value="A">Mode A</option>
+              <option value="B">Mode B (4-neighbour)</option>
+              <option value="C">Mode C (8-neighbour)</option>
+              <option value="U">Fixed by Upload</option>
+            </select>
+          </label>
+        </div>
+        <div class="drop-zone" id="patch-drop">
+          <input type="file" id="patch-file" accept=".asc,.txt" style="display:none" />
+          Drop or click to upload patch ID ASCII file
+          <span class="pill" id="patch-dimensions">No map loaded</span>
+          <span class="pill" id="patch-file-info">No file</span>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas class="grid-canvas" id="patch-canvas"></canvas>
+          <div class="canvas-overlay">
+            <div class="tooltip" id="patch-tooltip"></div>
+          </div>
+        </div>
+        <div class="status" id="patch-status"></div>
+      </section>
+
+      <section class="card" id="transition-card">
+        <h3>Transition Matrix</h3>
+        <div class="toolbar">
+          <button id="transition-reset">Reset to landuse types</button>
+          <button id="transition-toggle-all" class="secondary">Toggle all</button>
+          <label class="checkbox">
+            <input type="checkbox" id="eradicate-isolated" checked />
+            Eradicate isolated types
+          </label>
+        </div>
+        <div class="drop-zone" id="transition-drop">
+          <input type="file" id="transition-file" accept=".txt,.asc" style="display:none" />
+          Drop or click to upload transition matrix file
+          <span class="pill" id="transition-dimensions">No matrix loaded</span>
+          <span class="pill" id="transition-file-info">No file</span>
+        </div>
+        <div class="matrix-wrapper">
+          <table class="matrix" id="transition-matrix"></table>
+        </div>
+        <div class="status" id="transition-status"></div>
+      </section>
+    </div>
+
+    <div class="row settings-row">
+      <section class="card">
+        <h3>Grid Settings</h3>
+        <div class="toolbar">
+          <label>
+            Columns
+            <input type="number" id="setting-cols" min="1" value="10" />
+          </label>
+          <label>
+            Rows
+            <input type="number" id="setting-rows" min="1" value="10" />
+          </label>
+          <label>
+            Cellsize
+            <input type="number" id="setting-cellsize" min="0" value="75" step="0.01" />
+          </label>
+          <label>
+            NODATA
+            <input type="number" id="setting-nodata" value="-2" step="1" />
+          </label>
+          <label>
+            Landuse types
+            <input type="number" id="setting-types" min="1" value="8" />
+          </label>
+          <button id="apply-settings">Apply settings</button>
+        </div>
+        <div class="status" id="settings-status"></div>
+      </section>
+
+      <section class="card">
+        <h3>Landuse Palette</h3>
+        <div class="toolbar">
+          <button id="add-type">Add type</button>
+        </div>
+        <div class="color-list" id="color-list"></div>
+      </section>
+
+      <section class="card">
+        <h3>Export</h3>
+        <div class="toolbar">
+          <button id="export-landuse">Download landuse ASCII</button>
+          <button id="export-patch">Download patch ASCII</button>
+          <button id="export-transition">Download transition matrix</button>
+        </div>
+        <div class="status" id="export-status"></div>
+      </section>
+    </div>
+
+    <div class="row preview-row">
+      <section class="card">
+        <h3>Genom Preview</h3>
+        <div class="table-container">
+          <table id="genom-table">
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="status" id="genom-status"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const viewCells = 10;
+    const baseCellPx = 28;
+    const maxScale = 4;
+    const minScale = 1;
+
+    const state = {
+      landuse: null,
+      patch: null,
+      patchRaw: null,
+      transition: null,
+      meta: {
+        landuseUploaded: false
+      },
+      settings: {
+        ncols: 10,
+        nrows: 10,
+        cellsize: 75,
+        nodata: -2,
+        landuseTypes: 8,
+        currentLanduse: 1,
+        patchMode: "A",
+        tool: "pan",
+        showColors: true
+      },
+      colors: {},
+      typeNames: {},
+      view: {
+        offsetX: 0,
+        offsetY: 0,
+        scale: 1
+      },
+      selection: {
+        row: null,
+        col: null
+      }
+    };
+
+    const landuseCanvas = document.getElementById("landuse-canvas");
+    const patchCanvas = document.getElementById("patch-canvas");
+    const landuseTooltip = document.getElementById("landuse-tooltip");
+    const patchTooltip = document.getElementById("patch-tooltip");
+    const landusePopover = document.getElementById("landuse-popover");
+    const landusePopoverSelect = document.getElementById("landuse-popover-select");
+    const landusePopoverApply = document.getElementById("landuse-popover-apply");
+    const landuseToolSelect = document.getElementById("landuse-tool");
+    const showColorsToggle = document.getElementById("show-colors");
+
+    const transitionTable = document.getElementById("transition-matrix");
+    const landuseStatus = document.getElementById("landuse-status");
+    const patchStatus = document.getElementById("patch-status");
+    const transitionStatus = document.getElementById("transition-status");
+    const settingsStatus = document.getElementById("settings-status");
+    const genomStatus = document.getElementById("genom-status");
+
+    const landuseDimensions = document.getElementById("landuse-dimensions");
+    const patchDimensions = document.getElementById("patch-dimensions");
+    const transitionDimensions = document.getElementById("transition-dimensions");
+
+    const landuseFileInfo = document.getElementById("landuse-file-info");
+    const patchFileInfo = document.getElementById("patch-file-info");
+    const transitionFileInfo = document.getElementById("transition-file-info");
+
+    const currentLanduseSelect = document.getElementById("current-landuse");
+    const colorList = document.getElementById("color-list");
+
+    const addTypeButton = document.getElementById("add-type");
+
+    let isDrawing = false;
+    let isPanning = false;
+    let lastPan = null;
+
+    function setStatus(el, text, type) {
+      el.textContent = text;
+      el.classList.remove("ok", "error");
+      if (type) el.classList.add(type);
+    }
+
+    function parseAscii(text) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      if (lines.length < 7) {
+        throw new Error("ASCII grid must contain a 6-line header and data rows.");
+      }
+      const headerLines = lines.slice(0, 6);
+      const header = {};
+      for (const line of headerLines) {
+        const parts = line.split(/\s+/);
+        if (parts.length < 2) continue;
+        header[parts[0].toLowerCase()] = parseFloat(parts[1]);
+      }
+      const ncols = parseInt(header.ncols, 10);
+      const nrows = parseInt(header.nrows, 10);
+      if (!Number.isFinite(ncols) || !Number.isFinite(nrows)) {
+        throw new Error("Invalid ncols or nrows in header.");
+      }
+      const dataLines = lines.slice(6);
+      if (dataLines.length < nrows) {
+        throw new Error("Not enough rows in ASCII grid.");
+      }
+      const data = [];
+      for (let r = 0; r < nrows; r += 1) {
+        const rowValues = dataLines[r].split(/\s+/).filter(Boolean).map(Number);
+        if (rowValues.length !== ncols) {
+          throw new Error(`Row ${r + 1} has ${rowValues.length} values, expected ${ncols}.`);
+        }
+        data.push(rowValues);
+      }
+      return { header, data };
+    }
+
+    function parseTransition(text) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        throw new Error("Transition matrix is empty.");
+      }
+      const matrix = lines.map(line => line.split(/\s+/).filter(Boolean).map(Number));
+      const width = Math.max(...matrix.map(row => row.length));
+      const normalized = matrix.map(row => {
+        const copy = row.slice();
+        while (copy.length < width) copy.push(0);
+        return copy;
+      });
+      let hasHeader = false;
+      if (normalized[0].length >= 2 && normalized[0][0] <= 0) {
+        hasHeader = true;
+      }
+      return { matrix: normalized, hasHeader };
+    }
+
+    function ensureColorsAndNames() {
+      for (let i = 1; i <= state.settings.landuseTypes; i += 1) {
+        if (!state.colors[i]) {
+          const hue = Math.round((i * 47) % 360);
+          state.colors[i] = `hsl(${hue}, 60%, 55%)`;
+        }
+        if (!state.typeNames[i]) {
+          state.typeNames[i] = `Type ${i}`;
+        }
+      }
+    }
+
+    function rgbToHex(color) {
+      if (color.startsWith("#")) return color;
+      const ctx = document.createElement("canvas").getContext("2d");
+      ctx.fillStyle = color;
+      const computed = ctx.fillStyle;
+      if (computed.startsWith("#")) return computed;
+      const parts = computed.match(/\d+/g);
+      if (!parts) return "#888888";
+      const hex = parts.slice(0, 3).map(val => Number(val).toString(16).padStart(2, "0")).join("");
+      return `#${hex}`;
+    }
+
+    function getTextColorForBackground(color) {
+      const hex = rgbToHex(color).replace("#", "");
+      const r = parseInt(hex.substring(0, 2), 16) / 255;
+      const g = parseInt(hex.substring(2, 4), 16) / 255;
+      const b = parseInt(hex.substring(4, 6), 16) / 255;
+      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return luminance > 0.55 ? "#0b0f16" : "#e7ebf3";
+    }
+
+    function renderColorList() {
+      ensureColorsAndNames();
+      colorList.innerHTML = "";
+      for (let i = 1; i <= state.settings.landuseTypes; i += 1) {
+        const item = document.createElement("div");
+        item.className = "color-item";
+        const label = document.createElement("span");
+        label.textContent = `${i}`;
+        const nameInput = document.createElement("input");
+        nameInput.type = "text";
+        nameInput.value = state.typeNames[i];
+        nameInput.addEventListener("input", () => {
+          state.typeNames[i] = nameInput.value;
+          refreshLanduseSelect();
+          renderAll();
+        });
+        const colorInput = document.createElement("input");
+        colorInput.type = "color";
+        colorInput.value = rgbToHex(state.colors[i]);
+        colorInput.addEventListener("input", () => {
+          state.colors[i] = colorInput.value;
+          renderAll();
+        });
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "secondary icon-button";
+        deleteButton.type = "button";
+        deleteButton.title = "Delete type";
+        deleteButton.setAttribute("aria-label", "Delete type");
+        deleteButton.innerHTML = "🗑️";
+        deleteButton.disabled = state.settings.landuseTypes <= 1;
+        deleteButton.addEventListener("click", () => {
+          removeLanduseType(i);
+          document.getElementById("setting-types").value = state.settings.landuseTypes;
+          updateGenomPreview();
+        });
+
+        item.append(label, nameInput, colorInput, deleteButton);
+        colorList.append(item);
+      }
+    }
+
+    function refreshLanduseSelect() {
+      currentLanduseSelect.innerHTML = "";
+      for (let i = 1; i <= state.settings.landuseTypes; i += 1) {
+        const option = document.createElement("option");
+        option.value = i;
+        const name = state.typeNames[i] || `Type ${i}`;
+        option.textContent = `${i} ${name}`;
+        if (i === state.settings.currentLanduse) option.selected = true;
+        currentLanduseSelect.appendChild(option);
+      }
+      landusePopoverSelect.innerHTML = currentLanduseSelect.innerHTML;
+    }
+
+    function setupCanvasSizes() {
+      // Use available container size
+      const landuseWrapper = landuseCanvas.parentElement;
+      const patchWrapper = patchCanvas.parentElement;
+      
+      const landuseWidth = landuseWrapper.clientWidth - 12; // account for padding
+      const landuseHeight = landuseWrapper.clientHeight - 12;
+      const patchWidth = patchWrapper.clientWidth - 12;
+      const patchHeight = patchWrapper.clientHeight - 12;
+      
+      landuseCanvas.width = landuseWidth;
+      landuseCanvas.height = landuseHeight;
+      patchCanvas.width = patchWidth;
+      patchCanvas.height = patchHeight;
+      
+      // Update view to ensure proper clamping
+      clampView();
+      renderAll();
+    }
+
+    function clampView() {
+      if (!state.landuse) return;
+      const { ncols, nrows } = state.landuse.header;
+      const cellSize = baseCellPx * state.view.scale;
+      const maxOffsetX = Math.max(0, ncols * cellSize - landuseCanvas.width);
+      const maxOffsetY = Math.max(0, nrows * cellSize - landuseCanvas.height);
+      state.view.offsetX = Math.min(Math.max(0, state.view.offsetX), maxOffsetX);
+      state.view.offsetY = Math.min(Math.max(0, state.view.offsetY), maxOffsetY);
+    }
+
+    function getCellFromCanvas(canvas, event) {
+      if (!state.landuse) return null;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const cellSize = baseCellPx * state.view.scale;
+      const col = Math.floor((x + state.view.offsetX) / cellSize);
+      const row = Math.floor((y + state.view.offsetY) / cellSize);
+      if (col < 0 || row < 0 || col >= state.landuse.header.ncols || row >= state.landuse.header.nrows) {
+        return null;
+      }
+      return { row, col, x, y };
+    }
+
+    function getCellTopLeft(row, col) {
+      const cellSize = baseCellPx * state.view.scale;
+      const x = col * cellSize - state.view.offsetX;
+      const y = row * cellSize - state.view.offsetY;
+      return { x, y, cellSize };
+    }
+
+    function getLanduseValue(row, col) {
+      if (!state.landuse) return null;
+      return state.landuse.data[row][col];
+    }
+
+    function setLanduseValue(row, col, value) {
+      if (!state.landuse) return;
+      state.landuse.data[row][col] = value;
+    }
+
+    function drawGrid(canvas, data, mode) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!state.landuse || !data) return;
+      const cellSize = baseCellPx * state.view.scale;
+      const startCol = Math.floor(state.view.offsetX / cellSize);
+      const startRow = Math.floor(state.view.offsetY / cellSize);
+      const visibleCols = Math.ceil(canvas.width / cellSize) + 1;
+      const visibleRows = Math.ceil(canvas.height / cellSize) + 1;
+      const endCol = Math.min(state.landuse.header.ncols, startCol + visibleCols);
+      const endRow = Math.min(state.landuse.header.nrows, startRow + visibleRows);
+      ctx.font = `${Math.max(9, Math.floor(cellSize * 0.35))}px Segoe UI`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (let r = startRow; r < endRow; r += 1) {
+        for (let c = startCol; c < endCol; c += 1) {
+          const { x, y } = getCellTopLeft(r, c);
+          const value = mode === "patch" ? data[r][c] : getLanduseValue(r, c);
+          const landuseValue = getLanduseValue(r, c);
+          const color = landuseValue === state.settings.nodata ? "#1c1f2a" : state.colors[landuseValue] || "#303a52";
+          let fillColor = state.settings.showColors ? color : "#151a26";
+          if (mode === "patch" && Number(value) === 0) {
+            fillColor = "#2a2f3a";
+          }
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(x, y, cellSize, cellSize);
+          ctx.strokeStyle = "#2a3346";
+          ctx.strokeRect(x, y, cellSize, cellSize);
+          ctx.fillStyle = getTextColorForBackground(fillColor);
+      ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
+    }
+  }
+  
+  // Draw edge indicators if there are more cells outside visible area
+  drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cellSize);
+}
+
+function drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cellSize) {
+  if (!state.landuse) return;
+  
+  const { ncols, nrows } = state.landuse.header;
+  const indicatorSize = 4;
+  const indicatorColor = "rgba(106, 166, 255, 0.6)";
+  
+  // Left edge indicator
+  if (startCol > 0) {
+    ctx.fillStyle = indicatorColor;
+    ctx.fillRect(0, 0, indicatorSize, canvas.height);
+  }
+  
+  // Right edge indicator
+  if (endCol < ncols) {
+    ctx.fillStyle = indicatorColor;
+    ctx.fillRect(canvas.width - indicatorSize, 0, indicatorSize, canvas.height);
+  }
+  
+  // Top edge indicator
+  if (startRow > 0) {
+    ctx.fillStyle = indicatorColor;
+    ctx.fillRect(0, 0, canvas.width, indicatorSize);
+  }
+  
+  // Bottom edge indicator
+  if (endRow < nrows) {
+    ctx.fillStyle = indicatorColor;
+    ctx.fillRect(0, canvas.height - indicatorSize, canvas.width, indicatorSize);
+  }
+}
+
+function renderAll() {
+      if (state.landuse) {
+        landuseDimensions.textContent = `${state.landuse.header.ncols} x ${state.landuse.header.nrows}`;
+      }
+      if (state.patch) {
+        patchDimensions.textContent = `${state.patch.header.ncols} x ${state.patch.header.nrows}`;
+      }
+      drawGrid(landuseCanvas, state.landuse?.data, "landuse");
+      if (state.patch) drawGrid(patchCanvas, state.patch.data, "patch");
+    }
+
+    function buildDefaultLanduse() {
+      const header = {
+        ncols: state.settings.ncols,
+        nrows: state.settings.nrows,
+        xllcorner: 0,
+        yllcorner: 0,
+        cellsize: state.settings.cellsize,
+        nodata_value: state.settings.nodata
+      };
+      const data = Array.from({ length: header.nrows }, () =>
+        Array.from({ length: header.ncols }, () => state.settings.currentLanduse)
+      );
+      state.landuse = { header, data };
+      state.meta.landuseUploaded = false;
+      clampView();
+      renderAll();
+      setStatus(landuseStatus, "Landuse map ready.", "ok");
+    }
+
+    function buildDefaultTransition() {
+      const size = state.settings.landuseTypes;
+      const matrix = [];
+      const headerRow = [-2];
+      for (let i = 1; i <= size; i += 1) headerRow.push(i);
+      matrix.push(headerRow);
+      for (let r = 1; r <= size; r += 1) {
+        const row = [r];
+        for (let c = 1; c <= size; c += 1) row.push(1);
+        matrix.push(row);
+      }
+      state.transition = { matrix, hasHeader: true };
+      renderTransitionMatrix();
+    }
+
+    function resizeTransitionMatrix(newCount) {
+      if (!state.transition) {
+        buildDefaultTransition();
+        return;
+      }
+      const { matrix, hasHeader } = state.transition;
+      let working = matrix.map(row => row.slice());
+      if (!hasHeader) {
+        const headerRow = [-2];
+        for (let i = 1; i <= working[0].length; i += 1) headerRow.push(i);
+        working = [headerRow, ...working.map((row, idx) => [idx + 1, ...row])];
+      }
+      while (working.length - 1 < newCount) {
+        const nextIndex = working.length;
+        const newRow = [nextIndex];
+        for (let c = 1; c <= working[0].length - 1; c += 1) newRow.push(1);
+        working.push(newRow);
+      }
+      while (working[0].length - 1 < newCount) {
+        const nextIndex = working[0].length;
+        working[0].push(nextIndex);
+        for (let r = 1; r < working.length; r += 1) working[r].push(1);
+      }
+      while (working.length - 1 > newCount) working.pop();
+      while (working[0].length - 1 > newCount) {
+        working.forEach(row => row.pop());
+      }
+      state.transition = { matrix: working, hasHeader: true };
+      renderTransitionMatrix();
+    }
+
+    function applySettings() {
+      const previousTypes = state.settings.landuseTypes;
+      state.settings.ncols = Number(document.getElementById("setting-cols").value) || 1;
+      state.settings.nrows = Number(document.getElementById("setting-rows").value) || 1;
+      state.settings.cellsize = Number(document.getElementById("setting-cellsize").value) || 1;
+      state.settings.nodata = Number(document.getElementById("setting-nodata").value);
+      state.settings.landuseTypes = Number(document.getElementById("setting-types").value) || 1;
+      state.settings.currentLanduse = Math.min(state.settings.currentLanduse, state.settings.landuseTypes);
+      setLanduseTypeCount(state.settings.landuseTypes, previousTypes);
+      resizeGrid(state.landuse, "landuse");
+      resizeGrid(state.patch, "patch");
+      clampView();
+      renderAll();
+      updateGenomPreview();
+      refreshSettingsInputs();
+      setStatus(settingsStatus, "Settings applied.", "ok");
+    }
+
+    function resizeGrid(map, type) {
+      if (!map) {
+        if (type === "landuse") buildDefaultLanduse();
+        if (type === "patch") {
+          state.patch = null;
+          patchDimensions.textContent = "No map loaded";
+        }
+        return;
+      }
+      const newData = Array.from({ length: state.settings.nrows }, (_, r) => {
+        return Array.from({ length: state.settings.ncols }, (_, c) => {
+          if (r < map.data.length && c < map.data[0].length) return map.data[r][c];
+          return type === "landuse" ? state.settings.currentLanduse : 0;
+        });
+      });
+      map.data = newData;
+      map.header.ncols = state.settings.ncols;
+      map.header.nrows = state.settings.nrows;
+      map.header.cellsize = state.settings.cellsize;
+      map.header.nodata_value = state.settings.nodata;
+      if (type === "patch") setStatus(patchStatus, "Patch map resized.", "ok");
+    }
+
+    function validatePatchHeader(patchHeader) {
+      if (!state.landuse) return { ok: true };
+      const lu = state.landuse.header;
+      const fields = ["ncols", "nrows", "xllcorner", "yllcorner", "cellsize"];
+      for (const field of fields) {
+        const a = Number(lu[field]);
+        const b = Number(patchHeader[field]);
+        if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(a - b) > 1e-6) {
+          return { ok: false, message: `Patch header ${field} does not match landuse.` };
+        }
+      }
+      return { ok: true };
+    }
+
+    function computePatchIds() {
+      if (!state.landuse) {
+        setStatus(patchStatus, "Load a landuse map first.", "error");
+        return;
+      }
+      const mode = state.settings.patchMode;
+      const computed = mode === "A"
+        ? generateSequentialPatchIds()
+        : generateConnectedPatchIds(mode === "C");
+      state.patch = computed.patch;
+      renderAll();
+      updateGenomPreview(computed.genom);
+      setStatus(patchStatus, "Patch map updated.", "ok");
+    }
+
+    function generateSequentialPatchIds() {
+      const { nrows, ncols } = state.landuse.header;
+      let id = 0;
+      const patchData = [];
+      const genom = [];
+      for (let r = 0; r < nrows; r += 1) {
+        const row = [];
+        for (let c = 0; c < ncols; c += 1) {
+          const lu = state.landuse.data[r][c];
+          if (lu === state.settings.nodata) {
+            row.push(0);
+          } else {
+            id += 1;
+            row.push(id);
+            genom.push(lu);
+          }
+        }
+        patchData.push(row);
+      }
+      const patch = {
+        header: { ...state.landuse.header },
+        data: patchData
+      };
+      return { patch, genom };
+    }
+
+    function generateConnectedPatchIds(useEight) {
+      const { nrows, ncols } = state.landuse.header;
+      const visited = Array.from({ length: nrows }, () => Array(ncols).fill(false));
+      const patchData = Array.from({ length: nrows }, () => Array(ncols).fill(0));
+      const genom = [];
+      let id = 0;
+      const directions = useEight
+        ? [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1], [0, 1],
+            [1, -1], [1, 0], [1, 1]
+          ]
+        : [
+            [-1, 0],
+            [0, -1],
+            [0, 1],
+            [1, 0]
+          ];
+      for (let r = 0; r < nrows; r += 1) {
+        for (let c = 0; c < ncols; c += 1) {
+          const value = state.landuse.data[r][c];
+          if (visited[r][c] || value === state.settings.nodata) continue;
+          id += 1;
+          genom.push(value);
+          const stack = [[r, c]];
+          visited[r][c] = true;
+          patchData[r][c] = id;
+          while (stack.length) {
+            const [cr, cc] = stack.pop();
+            for (const [dr, dc] of directions) {
+              const nr = cr + dr;
+              const nc = cc + dc;
+              if (nr < 0 || nc < 0 || nr >= nrows || nc >= ncols) continue;
+              if (visited[nr][nc]) continue;
+              if (state.landuse.data[nr][nc] !== value) continue;
+              visited[nr][nc] = true;
+              patchData[nr][nc] = id;
+              stack.push([nr, nc]);
+            }
+          }
+        }
+      }
+      const patch = {
+        header: { ...state.landuse.header },
+        data: patchData
+      };
+      return { patch, genom };
+    }
+
+    function buildGenomFromPatch(patchData) {
+      const idMap = new Map();
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = patchData[r][c];
+          if (id <= 0) continue;
+          const lu = state.landuse.data[r][c];
+          if (!idMap.has(id)) {
+            idMap.set(id, lu);
+          } else if (idMap.get(id) !== lu) {
+            return { error: `Patch ${id} contains multiple landuse types.` };
+          }
+        }
+      }
+      const ids = Array.from(idMap.keys()).sort((a, b) => a - b);
+      const genom = ids.map(id => idMap.get(id));
+      return { genom };
+    }
+
+    function normalizePatchIds(patchData, genom) {
+      const ids = new Set();
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = patchData[r][c];
+          if (id > 0) ids.add(id);
+        }
+      }
+      const sorted = Array.from(ids).sort((a, b) => a - b);
+      const mapping = new Map(sorted.map((oldId, idx) => [oldId, idx + 1]));
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = patchData[r][c];
+          if (id <= 0) continue;
+          patchData[r][c] = mapping.get(id) || 0;
+        }
+      }
+    }
+
+    function applyEradication(patchData, genom) {
+      if (!document.getElementById("eradicate-isolated").checked) {
+        return { patchData, genom };
+      }
+      if (!state.transition) return { patchData, genom };
+      const { matrix, hasHeader } = state.transition;
+
+      const typesPresent = new Set();
+      genom.forEach(val => typesPresent.add(val));
+
+      let allTypes = [];
+      let getValue = () => 0;
+      if (hasHeader) {
+        allTypes = matrix[0].slice(1);
+        const colIndex = new Map(allTypes.map((t, idx) => [t, idx + 1]));
+        const rowIndex = new Map();
+        for (let r = 1; r < matrix.length; r += 1) {
+          rowIndex.set(matrix[r][0], r);
+        }
+        getValue = (source, target) => {
+          const r = rowIndex.get(source);
+          const c = colIndex.get(target);
+          if (r == null || c == null) return 0;
+          return Number(matrix[r][c] || 0);
+        };
+      } else {
+        const maxType = Math.min(matrix.length, matrix[0]?.length || 0);
+        allTypes = Array.from({ length: maxType }, (_, idx) => idx + 1);
+        getValue = (source, target) => Number(matrix[source - 1]?.[target - 1] || 0);
+      }
+
+      const eradicatedTypes = Array.from(typesPresent).filter(type => {
+        for (const other of allTypes) {
+          if (other === type) continue;
+          if (getValue(type, other) === 1) return false;
+          if (getValue(other, type) === 1) return false;
+        }
+        return true;
+      });
+      if (eradicatedTypes.length === 0) return { patchData, genom };
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = patchData[r][c];
+          if (id <= 0) continue;
+          const lu = state.landuse.data[r][c];
+          if (eradicatedTypes.includes(lu)) patchData[r][c] = 0;
+        }
+      }
+      const newGenom = genom.filter(val => !eradicatedTypes.includes(val));
+      return { patchData, genom: newGenom };
+    }
+
+    function updateGenomPreview(precomputedGenom) {
+      if (!state.landuse) {
+        setStatus(genomStatus, "Load a landuse map to preview the genom.", "error");
+        return;
+      }
+      let patchData = null;
+      let genom = precomputedGenom;
+      let patchHeader = null;
+      const useUploadedPatch = state.settings.patchMode === "U";
+      if (useUploadedPatch) {
+        if (!state.patchRaw) {
+          setStatus(patchStatus, "No patch file uploaded for 'Fixed by Upload'.", "error");
+          return;
+        }
+        patchData = state.patchRaw.data;
+        patchHeader = state.patchRaw.header;
+      } else {
+        const computed = state.settings.patchMode === "A"
+          ? generateSequentialPatchIds()
+          : generateConnectedPatchIds(state.settings.patchMode === "C");
+        patchData = computed.patch.data;
+        genom = computed.genom;
+        patchHeader = computed.patch.header;
+      }
+
+      if (!genom) {
+        const result = buildGenomFromPatch(patchData);
+        if (result.error) {
+          setStatus(genomStatus, result.error, "error");
+          return;
+        }
+        genom = result.genom;
+      }
+
+      const patchCopy = patchData.map(row => row.slice());
+      const eradicated = applyEradication(patchCopy, genom.slice());
+
+      const genomResult = buildGenomFromPatch(eradicated.patchData);
+      if (genomResult.error) {
+        setStatus(genomStatus, genomResult.error, "error");
+        return;
+      }
+      normalizePatchIds(eradicated.patchData);
+      state.patch = { header: { ...patchHeader }, data: eradicated.patchData };
+      const normalizedGenom = genomResult.genom;
+      const ids = normalizedGenom.map((_, idx) => idx + 1);
+      
+      const tableBody = document.querySelector("#genom-table tbody");
+      tableBody.innerHTML = "";
+      
+      // ID Row
+      const idRow = document.createElement("tr");
+      const idLabel = document.createElement("td");
+      idLabel.textContent = "ID";
+      idRow.appendChild(idLabel);
+      ids.forEach(id => {
+        const cell = document.createElement("td");
+        cell.textContent = id;
+        idRow.appendChild(cell);
+      });
+      tableBody.appendChild(idRow);
+      
+      // TY Row
+      const tyRow = document.createElement("tr");
+      const tyLabel = document.createElement("td");
+      tyLabel.textContent = "TY";
+      tyRow.appendChild(tyLabel);
+      normalizedGenom.forEach(ty => {
+        const cell = document.createElement("td");
+        cell.textContent = ty;
+        tyRow.appendChild(cell);
+      });
+      tableBody.appendChild(tyRow);
+      
+      renderAll();
+      setStatus(genomStatus, `Genom length: ${normalizedGenom.length}`, "ok");
+    }
+
+    function asciiFromData(data) {
+      if (!state.landuse) return "";
+      const header = [
+        `ncols         ${state.landuse.header.ncols}`,
+        `nrows         ${state.landuse.header.nrows}`,
+        `xllcorner     ${state.landuse.header.xllcorner}`,
+        `yllcorner     ${state.landuse.header.yllcorner}`,
+        `cellsize      ${state.landuse.header.cellsize}`,
+        `NODATA_value  ${state.settings.nodata}`
+      ];
+      const rows = data.map(row => row.join(" "));
+      return [...header, ...rows].join("\n");
+    }
+
+    function handleFileInput(file, handler) {
+      const reader = new FileReader();
+      reader.onload = event => handler(event.target.result, file?.name || "");
+      reader.readAsText(file);
+    }
+
+    function setupDropZone(zone, fileInput, handler) {
+      zone.addEventListener("dragover", event => {
+        event.preventDefault();
+        zone.classList.add("dragover");
+      });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+      zone.addEventListener("drop", event => {
+        event.preventDefault();
+        zone.classList.remove("dragover");
+        const file = event.dataTransfer.files[0];
+        if (file) handleFileInput(file, handler);
+      });
+      zone.addEventListener("click", () => {
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", event => {
+        const file = event.target.files[0];
+        if (file) handleFileInput(file, handler);
+      });
+    }
+
+    function refreshSettingsInputs() {
+      document.getElementById("setting-cols").value = state.settings.ncols;
+      document.getElementById("setting-rows").value = state.settings.nrows;
+      document.getElementById("setting-cellsize").value = state.settings.cellsize;
+      document.getElementById("setting-nodata").value = state.settings.nodata;
+      document.getElementById("setting-types").value = state.settings.landuseTypes;
+      document.getElementById("patch-mode").value = state.settings.patchMode;
+    }
+
+    function downloadText(filename, content) {
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function setLanduseTypeCount(newCount, previousCount) {
+      const count = Math.max(1, newCount);
+      state.settings.landuseTypes = count;
+      ensureColorsAndNames();
+      for (let i = count + 1; i <= previousCount; i += 1) {
+        delete state.colors[i];
+        delete state.typeNames[i];
+      }
+      if (state.landuse) {
+        for (let r = 0; r < state.landuse.data.length; r += 1) {
+          for (let c = 0; c < state.landuse.data[0].length; c += 1) {
+            if (state.landuse.data[r][c] > count) state.landuse.data[r][c] = count;
+          }
+        }
+      }
+      state.settings.currentLanduse = Math.min(state.settings.currentLanduse, count);
+      refreshLanduseSelect();
+      renderColorList();
+      resizeTransitionMatrix(count);
+    }
+
+    function removeTransitionType(typeToRemove) {
+      if (!state.transition) return;
+      const { matrix, hasHeader } = state.transition;
+      let working = matrix.map(row => row.slice());
+      if (!hasHeader) {
+        const headerRow = [-2];
+        for (let i = 1; i <= working[0].length; i += 1) headerRow.push(i);
+        working = [headerRow, ...working.map((row, idx) => [idx + 1, ...row])];
+      }
+      const headerTypes = working[0].slice(1);
+      const colIndex = headerTypes.indexOf(typeToRemove);
+      if (colIndex === -1) return;
+      const removeCol = colIndex + 1;
+
+      const remainingTypes = headerTypes.filter(t => t !== typeToRemove).sort((a, b) => a - b);
+      const typeMap = new Map();
+      remainingTypes.forEach((t, idx) => typeMap.set(t, idx + 1));
+
+      const newCount = remainingTypes.length;
+      const newMatrix = [];
+      newMatrix.push([-2, ...Array.from({ length: newCount }, (_, idx) => idx + 1)]);
+      for (const sourceOld of remainingTypes) {
+        const rowOldIndex = working.findIndex((row, idx) => idx > 0 && row[0] === sourceOld);
+        const newRow = [typeMap.get(sourceOld)];
+        for (const targetOld of remainingTypes) {
+          const colOldIndex = working[0].indexOf(targetOld);
+          const value = rowOldIndex === -1 || colOldIndex === -1 ? 0 : Number(working[rowOldIndex][colOldIndex] || 0);
+          newRow.push(value);
+        }
+        newMatrix.push(newRow);
+      }
+      state.transition = { matrix: newMatrix, hasHeader: true };
+    }
+
+    function removeLanduseType(typeToRemove) {
+      const previous = state.settings.landuseTypes;
+      if (previous <= 1) return;
+      const clamped = Math.min(Math.max(1, typeToRemove), previous);
+
+      for (let i = clamped; i < previous; i += 1) {
+        state.colors[i] = state.colors[i + 1];
+        state.typeNames[i] = state.typeNames[i + 1];
+      }
+      delete state.colors[previous];
+      delete state.typeNames[previous];
+
+      if (state.landuse) {
+        for (let r = 0; r < state.landuse.data.length; r += 1) {
+          for (let c = 0; c < state.landuse.data[0].length; c += 1) {
+            const v = state.landuse.data[r][c];
+            if (v === state.settings.nodata) continue;
+            if (v === clamped) state.landuse.data[r][c] = 1;
+            else if (v > clamped) state.landuse.data[r][c] = v - 1;
+          }
+        }
+      }
+
+      if (state.settings.currentLanduse === clamped) state.settings.currentLanduse = 1;
+      else if (state.settings.currentLanduse > clamped) state.settings.currentLanduse -= 1;
+
+      state.settings.landuseTypes = previous - 1;
+      removeTransitionType(clamped);
+      refreshLanduseSelect();
+      renderColorList();
+      renderTransitionMatrix();
+      renderAll();
+    }
+
+    function updateTooltip(tooltip, cell) {
+      if (!cell) {
+        tooltip.classList.remove("visible");
+        return;
+      }
+      const landuseValue = getLanduseValue(cell.row, cell.col);
+      const name = landuseValue === state.settings.nodata ? "NODATA" : state.typeNames[landuseValue] || `Type ${landuseValue}`;
+      tooltip.textContent = name;
+      tooltip.style.left = `${cell.x}px`;
+      tooltip.style.top = `${cell.y}px`;
+      tooltip.classList.add("visible");
+    }
+
+    function openPopover(cell) {
+      if (!cell) return;
+      state.selection.row = cell.row;
+      state.selection.col = cell.col;
+      const { x, y, cellSize } = getCellTopLeft(cell.row, cell.col);
+      const offset = 6;
+      landusePopover.style.left = `${x + cellSize * 0.5 + offset}px`;
+      landusePopover.style.top = `${y + cellSize * 0.5 + offset}px`;
+      landusePopover.classList.add("visible");
+      landusePopoverSelect.value = String(getLanduseValue(cell.row, cell.col));
+    }
+
+    function closePopover() {
+      landusePopover.classList.remove("visible");
+    }
+
+    function floodFill(row, col, targetValue, replacementValue) {
+      if (targetValue === replacementValue) return;
+      const rows = state.landuse.data.length;
+      const cols = state.landuse.data[0].length;
+      const stack = [[row, col]];
+      while (stack.length) {
+        const [r, c] = stack.pop();
+        if (r < 0 || c < 0 || r >= rows || c >= cols) continue;
+        if (state.landuse.data[r][c] !== targetValue) continue;
+        state.landuse.data[r][c] = replacementValue;
+        stack.push([r - 1, c]);
+        stack.push([r + 1, c]);
+        stack.push([r, c - 1]);
+        stack.push([r, c + 1]);
+      }
+    }
+
+    function renderTransitionMatrix() {
+      if (!state.transition) return;
+      const { matrix, hasHeader } = state.transition;
+      transitionTable.innerHTML = "";
+      const tbody = document.createElement("tbody");
+      for (let r = 0; r < matrix.length; r += 1) {
+        const row = document.createElement("tr");
+        for (let c = 0; c < matrix[r].length; c += 1) {
+          const isHeaderRow = hasHeader && r === 0;
+          const isHeaderCol = hasHeader && c === 0;
+          const cell = document.createElement(isHeaderRow || isHeaderCol ? "th" : "td");
+          if (isHeaderCol && r !== 0) cell.classList.add("row-header");
+          if (isHeaderRow || isHeaderCol) {
+            cell.textContent = matrix[r][c];
+          } else {
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = Number(matrix[r][c]) === 1;
+            checkbox.addEventListener("change", () => {
+              matrix[r][c] = checkbox.checked ? 1 : 0;
+              updateGenomPreview();
+            });
+            cell.appendChild(checkbox);
+          }
+          row.appendChild(cell);
+        }
+        tbody.appendChild(row);
+      }
+      transitionTable.appendChild(tbody);
+      transitionDimensions.textContent = `${matrix.length} x ${matrix[0]?.length || 0}`;
+      setStatus(transitionStatus, "Transition matrix ready.", "ok");
+    }
+
+    function handleCanvasMouseDown(event) {
+      const cell = getCellFromCanvas(landuseCanvas, event);
+      if (event.button === 2 || event.shiftKey || state.settings.tool === "pan") {
+        isPanning = true;
+        lastPan = { x: event.clientX, y: event.clientY };
+        landusePopover.classList.remove("visible");
+        return;
+      }
+      if (!cell) return;
+      
+      // Stop propagation to prevent immediate closing of popover
+      event.stopPropagation();
+      
+      if (state.settings.tool === "pencil") {
+        isDrawing = true;
+        setLanduseValue(cell.row, cell.col, state.settings.currentLanduse);
+        updateGenomPreview();
+      } else if (state.settings.tool === "fill") {
+        const target = getLanduseValue(cell.row, cell.col);
+        floodFill(cell.row, cell.col, target, state.settings.currentLanduse);
+        updateGenomPreview();
+      } else if (state.settings.tool === "select") {
+        openPopover(cell);
+      }
+    }
+
+    function handleCanvasMouseMove(event) {
+      const cell = getCellFromCanvas(landuseCanvas, event);
+      updateTooltip(landuseTooltip, cell);
+      if (isPanning && lastPan) {
+        const dx = event.clientX - lastPan.x;
+        const dy = event.clientY - lastPan.y;
+        state.view.offsetX -= dx;
+        state.view.offsetY -= dy;
+        lastPan = { x: event.clientX, y: event.clientY };
+        clampView();
+        renderAll();
+        return;
+      }
+      if (isDrawing && cell) {
+        setLanduseValue(cell.row, cell.col, state.settings.currentLanduse);
+        updateGenomPreview();
+      }
+    }
+
+    function handleCanvasMouseUp() {
+      isDrawing = false;
+      isPanning = false;
+      lastPan = null;
+    }
+
+    function handleCanvasWheel(event) {
+      event.preventDefault();
+      if (!state.landuse) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const oldScale = state.view.scale;
+      const delta = event.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = Math.min(maxScale, Math.max(minScale, oldScale * delta));
+      if (newScale === oldScale) return;
+      const worldX = (x + state.view.offsetX) / oldScale;
+      const worldY = (y + state.view.offsetY) / oldScale;
+      state.view.scale = newScale;
+      state.view.offsetX = worldX * newScale - x;
+      state.view.offsetY = worldY * newScale - y;
+      clampView();
+      renderAll();
+    }
+
+    function setupCanvasInteractions() {
+      landuseCanvas.addEventListener("mousedown", handleCanvasMouseDown);
+      landuseCanvas.addEventListener("mousemove", handleCanvasMouseMove);
+      landuseCanvas.addEventListener("wheel", handleCanvasWheel);
+      landuseCanvas.addEventListener("contextmenu", event => event.preventDefault());
+      patchCanvas.addEventListener("mousedown", event => {
+        if (event.button === 2 || event.shiftKey) {
+          isPanning = true;
+          lastPan = { x: event.clientX, y: event.clientY };
+        }
+      });
+      patchCanvas.addEventListener("mousemove", event => {
+        const cell = getCellFromCanvas(patchCanvas, event);
+        updateTooltip(patchTooltip, cell);
+        if (isPanning && lastPan) {
+          const dx = event.clientX - lastPan.x;
+          const dy = event.clientY - lastPan.y;
+          state.view.offsetX -= dx;
+          state.view.offsetY -= dy;
+          lastPan = { x: event.clientX, y: event.clientY };
+          clampView();
+          renderAll();
+        }
+      });
+      patchCanvas.addEventListener("wheel", handleCanvasWheel);
+      patchCanvas.addEventListener("contextmenu", event => event.preventDefault());
+      window.addEventListener("mouseup", handleCanvasMouseUp);
+    }
+
+    landusePopoverApply.addEventListener("click", () => {
+      if (state.selection.row == null || state.selection.col == null) return;
+      const value = Number(landusePopoverSelect.value);
+      setLanduseValue(state.selection.row, state.selection.col, value);
+      closePopover();
+      updateGenomPreview();
+    });
+
+    document.getElementById("landuse-popover-close").addEventListener("click", closePopover);
+
+    // Close popover when clicking outside
+    document.addEventListener("mousedown", (event) => {
+      if (landusePopover.classList.contains("visible") && 
+          !landusePopover.contains(event.target) &&
+          !event.target.closest("#landuse-popover-close") &&
+          !event.target.closest("#landuse-popover-apply") &&
+          !event.target.closest("#landuse-popover-select")) {
+        closePopover();
+      }
+    });
+
+    document.getElementById("apply-settings").addEventListener("click", applySettings);
+    landuseToolSelect.addEventListener("change", event => {
+      state.settings.tool = event.target.value;
+      closePopover();
+    });
+    showColorsToggle.addEventListener("change", event => {
+      state.settings.showColors = event.target.checked;
+      renderAll();
+    });
+    currentLanduseSelect.addEventListener("change", event => {
+      state.settings.currentLanduse = Number(event.target.value);
+    });
+    document.getElementById("patch-mode").addEventListener("change", event => {
+      state.settings.patchMode = event.target.value;
+      updateGenomPreview();
+    });
+    document.getElementById("landuse-fill").addEventListener("click", () => {
+      if (!state.landuse) return;
+      for (let r = 0; r < state.landuse.data.length; r += 1) {
+        for (let c = 0; c < state.landuse.data[0].length; c += 1) {
+          state.landuse.data[r][c] = state.settings.currentLanduse;
+        }
+      }
+      updateGenomPreview();
+    });
+    document.getElementById("transition-reset").addEventListener("click", buildDefaultTransition);
+    document.getElementById("transition-toggle-all").addEventListener("click", () => {
+      if (!state.transition) return;
+      const { matrix, hasHeader } = state.transition;
+      for (let r = hasHeader ? 1 : 0; r < matrix.length; r += 1) {
+        for (let c = hasHeader ? 1 : 0; c < matrix[r].length; c += 1) {
+          matrix[r][c] = matrix[r][c] === 1 ? 0 : 1;
+        }
+      }
+      renderTransitionMatrix();
+      updateGenomPreview();
+    });
+    document.getElementById("eradicate-isolated").addEventListener("change", updateGenomPreview);
+
+    addTypeButton.addEventListener("click", () => {
+      const previous = state.settings.landuseTypes;
+      setLanduseTypeCount(previous + 1, previous);
+      document.getElementById("setting-types").value = state.settings.landuseTypes;
+      renderAll();
+    });
+
+    document.getElementById("export-landuse").addEventListener("click", () => {
+      if (!state.landuse) return;
+      downloadText("landuse_map.asc", asciiFromData(state.landuse.data));
+    });
+    document.getElementById("export-patch").addEventListener("click", () => {
+      if (!state.patch) return;
+      downloadText("patch_ID_map.asc", asciiFromData(state.patch.data));
+    });
+    document.getElementById("export-transition").addEventListener("click", () => {
+      if (!state.transition) return;
+      const content = state.transition.matrix.map(row => row.join(" ")).join("\n");
+      downloadText("transition_matrix.txt", content);
+    });
+
+    setupDropZone(
+      document.getElementById("landuse-drop"),
+      document.getElementById("landuse-file"),
+      (text, filename) => {
+        try {
+          const parsed = parseAscii(text);
+          state.landuse = parsed;
+          state.meta.landuseUploaded = true;
+          landuseFileInfo.textContent = filename ? `File: ${filename}` : "File uploaded";
+          state.settings.ncols = parsed.header.ncols;
+          state.settings.nrows = parsed.header.nrows;
+          state.settings.cellsize = parsed.header.cellsize || state.settings.cellsize;
+          state.settings.nodata = parsed.header.nodata_value ?? state.settings.nodata;
+          const maxType = Math.max(...parsed.data.flat().filter(val => val !== state.settings.nodata), state.settings.landuseTypes);
+          const previousTypes = state.settings.landuseTypes;
+          state.settings.landuseTypes = maxType;
+          setLanduseTypeCount(state.settings.landuseTypes, previousTypes);
+          refreshSettingsInputs();
+          clampView();
+          renderAll();
+          updateGenomPreview();
+        } catch (error) {
+          setStatus(landuseStatus, error.message, "error");
+        }
+      }
+    );
+
+    setupDropZone(
+      document.getElementById("patch-drop"),
+      document.getElementById("patch-file"),
+      (text, filename) => {
+        try {
+          const parsed = parseAscii(text);
+          if (state.landuse && !state.meta.landuseUploaded) {
+            state.settings.ncols = parsed.header.ncols;
+            state.settings.nrows = parsed.header.nrows;
+            state.settings.cellsize = parsed.header.cellsize || state.settings.cellsize;
+            if (parsed.header.nodata_value != null) state.settings.nodata = parsed.header.nodata_value;
+            state.landuse.header.ncols = state.settings.ncols;
+            state.landuse.header.nrows = state.settings.nrows;
+            state.landuse.header.xllcorner = parsed.header.xllcorner;
+            state.landuse.header.yllcorner = parsed.header.yllcorner;
+            state.landuse.header.cellsize = state.settings.cellsize;
+            state.landuse.header.nodata_value = state.settings.nodata;
+            resizeGrid(state.landuse, "landuse");
+            refreshSettingsInputs();
+          }
+          const validation = validatePatchHeader(parsed.header);
+          if (!validation.ok) {
+            setStatus(patchStatus, validation.message, "error");
+            return;
+          }
+          state.patchRaw = parsed;
+          patchFileInfo.textContent = filename ? `File: ${filename}` : "File uploaded";
+          state.settings.patchMode = "U";
+          refreshSettingsInputs();
+          updateGenomPreview();
+          renderAll();
+        } catch (error) {
+          setStatus(patchStatus, error.message, "error");
+        }
+      }
+    );
+
+    setupDropZone(
+      document.getElementById("transition-drop"),
+      document.getElementById("transition-file"),
+      (text, filename) => {
+        try {
+          state.transition = parseTransition(text);
+          transitionFileInfo.textContent = filename ? `File: ${filename}` : "File uploaded";
+          renderTransitionMatrix();
+          updateGenomPreview();
+        } catch (error) {
+          setStatus(transitionStatus, error.message, "error");
+        }
+      }
+    );
+
+    setupCanvasSizes();
+    setupCanvasInteractions();
+    ensureColorsAndNames();
+    refreshLanduseSelect();
+    renderColorList();
+    buildDefaultLanduse();
+    buildDefaultTransition();
+    clampView();
+    renderAll();
+    updateGenomPreview();
+
+    // Handle window resize to update canvas sizes
+    window.addEventListener("resize", () => {
+      setupCanvasSizes();
+    });
+  </script>
+</body>
+</html>
