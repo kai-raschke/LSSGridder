@@ -164,6 +164,13 @@
       min-height: 300px;
     }
 
+    #landuse-card .canvas-wrapper,
+    #patch-card .canvas-wrapper {
+      height: 320px;
+      flex: none;
+      min-height: 0;
+    }
+
     canvas.grid-canvas {
       display: block;
       width: 100%;
@@ -534,9 +541,11 @@
               <option value="A">Mode A (All)</option>
               <option value="B">Mode B (4-neighbour)</option>
               <option value="C">Mode C (8-neighbour)</option>
+              <option value="D">Mode D (Manual)</option>
               <option value="U">Fixed by Upload</option>
             </select>
           </label>
+          <button id="patch-reset" class="secondary" style="display:none;">Reset to Mode A</button>
         </div>
         <div class="drop-zone" id="patch-drop">
           <input type="file" id="patch-file" accept=".asc,.txt" style="display:none" />
@@ -550,6 +559,7 @@
             <div class="tooltip" id="patch-tooltip"></div>
           </div>
         </div>
+        <div class="status" id="patch-mode-help" style="font-size: 11px; color: #7a8599;"></div>
         <div class="status" id="patch-status"></div>
       </section>
 
@@ -642,6 +652,8 @@
     const baseCellPx = 28;
     const maxScale = 4;
     const minScale = 1;
+    const axisMarginLeft = 68;
+    const axisMarginTop = 18;
 
     const state = {
       landuse: null,
@@ -672,6 +684,17 @@
       selection: {
         row: null,
         col: null
+      },
+      manualPatch: {
+        // Maps "r,c" -> patchId for manually assigned cells
+        cellMap: {},
+        nextId: 1,
+        // Currently selected patch id for adding cells via Ctrl+click
+        activePatchId: null,
+        // Track if Mode D has been initialized with current data
+        initialized: false,
+        // Store the last computed patch data for initialization
+        lastComputedData: null
       }
     };
 
@@ -878,8 +901,10 @@
       if (!state.landuse) return;
       const { ncols, nrows } = state.landuse.header;
       const cellSize = baseCellPx * state.view.scale;
-      const maxOffsetX = Math.max(0, ncols * cellSize - landuseCanvas.width);
-      const maxOffsetY = Math.max(0, nrows * cellSize - landuseCanvas.height);
+      const gridW = landuseCanvas.width - axisMarginLeft;
+      const gridH = landuseCanvas.height - axisMarginTop;
+      const maxOffsetX = Math.max(0, ncols * cellSize - gridW);
+      const maxOffsetY = Math.max(0, nrows * cellSize - gridH);
       state.view.offsetX = Math.min(Math.max(0, state.view.offsetX), maxOffsetX);
       state.view.offsetY = Math.min(Math.max(0, state.view.offsetY), maxOffsetY);
     }
@@ -887,21 +912,22 @@
     function getCellFromCanvas(canvas, event) {
       if (!state.landuse) return null;
       const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const x = event.clientX - rect.left - axisMarginLeft;
+      const y = event.clientY - rect.top - axisMarginTop;
+      if (x < 0 || y < 0) return null;
       const cellSize = baseCellPx * state.view.scale;
       const col = Math.floor((x + state.view.offsetX) / cellSize);
       const row = Math.floor((y + state.view.offsetY) / cellSize);
       if (col < 0 || row < 0 || col >= state.landuse.header.ncols || row >= state.landuse.header.nrows) {
         return null;
       }
-      return { row, col, x, y };
+      return { row, col, x: x + axisMarginLeft, y: y + axisMarginTop };
     }
 
     function getCellTopLeft(row, col) {
       const cellSize = baseCellPx * state.view.scale;
-      const x = col * cellSize - state.view.offsetX;
-      const y = row * cellSize - state.view.offsetY;
+      const x = axisMarginLeft + col * cellSize - state.view.offsetX;
+      const y = axisMarginTop + row * cellSize - state.view.offsetY;
       return { x, y, cellSize };
     }
 
@@ -920,12 +946,21 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!state.landuse || !data) return;
       const cellSize = baseCellPx * state.view.scale;
+      const gridW = canvas.width - axisMarginLeft;
+      const gridH = canvas.height - axisMarginTop;
       const startCol = Math.floor(state.view.offsetX / cellSize);
       const startRow = Math.floor(state.view.offsetY / cellSize);
-      const visibleCols = Math.ceil(canvas.width / cellSize) + 1;
-      const visibleRows = Math.ceil(canvas.height / cellSize) + 1;
+      const visibleCols = Math.ceil(gridW / cellSize) + 1;
+      const visibleRows = Math.ceil(gridH / cellSize) + 1;
       const endCol = Math.min(state.landuse.header.ncols, startCol + visibleCols);
       const endRow = Math.min(state.landuse.header.nrows, startRow + visibleRows);
+
+      // Clip grid drawing to the area after axis margins
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(axisMarginLeft, axisMarginTop, gridW, gridH);
+      ctx.clip();
+
       ctx.font = `${Math.max(9, Math.floor(cellSize * 0.35))}px Segoe UI`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -975,14 +1010,31 @@
               ctx.stroke();
             }
           }
+          // Highlight active patch cells in Mode D
+          if (mode === "patch" && state.settings.patchMode === "D" && state.manualPatch.activePatchId != null) {
+            const cellKey = `${r},${c}`;
+            const cellPatchId = state.manualPatch.cellMap[cellKey];
+            if (cellPatchId === state.manualPatch.activePatchId) {
+              ctx.fillStyle = "rgba(106, 166, 255, 0.25)";
+              ctx.fillRect(x, y, cellSize, cellSize);
+              ctx.strokeStyle = "rgba(106, 166, 255, 0.8)";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+              ctx.lineWidth = 1;
+            }
+          }
+
           ctx.fillStyle = getTextColorForBackground(fillColor);
-      ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
+          ctx.fillText(String(value), x + cellSize / 2, y + cellSize / 2);
+        }
+      }
+
+      drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cellSize);
+      ctx.restore();
+
+      // Draw coordinate axes
+      drawAxes(ctx, canvas, startCol, endCol, startRow, endRow, cellSize);
     }
-  }
-  
-  // Draw edge indicators if there are more cells outside visible area
-  drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cellSize);
-}
 
 function drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cellSize) {
   if (!state.landuse) return;
@@ -990,30 +1042,83 @@ function drawEdgeIndicators(ctx, canvas, startCol, endCol, startRow, endRow, cel
   const { ncols, nrows } = state.landuse.header;
   const indicatorSize = 4;
   const indicatorColor = "rgba(106, 166, 255, 0.6)";
+  const gx = axisMarginLeft;
+  const gy = axisMarginTop;
+  const gw = canvas.width - gx;
+  const gh = canvas.height - gy;
   
   // Left edge indicator
   if (startCol > 0) {
     ctx.fillStyle = indicatorColor;
-    ctx.fillRect(0, 0, indicatorSize, canvas.height);
+    ctx.fillRect(gx, gy, indicatorSize, gh);
   }
   
   // Right edge indicator
   if (endCol < ncols) {
     ctx.fillStyle = indicatorColor;
-    ctx.fillRect(canvas.width - indicatorSize, 0, indicatorSize, canvas.height);
+    ctx.fillRect(canvas.width - indicatorSize, gy, indicatorSize, gh);
   }
   
   // Top edge indicator
   if (startRow > 0) {
     ctx.fillStyle = indicatorColor;
-    ctx.fillRect(0, 0, canvas.width, indicatorSize);
+    ctx.fillRect(gx, gy, gw, indicatorSize);
   }
   
   // Bottom edge indicator
   if (endRow < nrows) {
     ctx.fillStyle = indicatorColor;
-    ctx.fillRect(0, canvas.height - indicatorSize, canvas.width, indicatorSize);
+    ctx.fillRect(gx, canvas.height - indicatorSize, gw, indicatorSize);
   }
+}
+
+function drawAxes(ctx, canvas, startCol, endCol, startRow, endRow, cellSize) {
+  if (!state.landuse) return;
+  const axisFontSize = Math.min(10, Math.max(7, Math.floor(cellSize * 0.32)));
+  ctx.font = `${axisFontSize}px Consolas, monospace`;
+  ctx.fillStyle = "#7a8599";
+
+  // Decide tick step: skip labels when cells are narrow to avoid overlap
+  const xMinPx = 58;
+  const yMinPx = 18;
+  const colStep = Math.max(1, Math.ceil(xMinPx / cellSize));
+  const rowStep = Math.max(1, Math.ceil(yMinPx / cellSize));
+
+  // Align start to step boundary for cleaner labels
+  const firstCol = startCol - (startCol % colStep);
+  const firstRow = startRow - (startRow % rowStep);
+
+  // Top axis (X coordinates) — drawn in the top margin
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (let c = firstCol; c < endCol; c += colStep) {
+    if (c < 0) continue;
+    const px = axisMarginLeft + c * cellSize - state.view.offsetX + cellSize * 0.5;
+    if (px < axisMarginLeft - 5 || px > canvas.width + 5) continue;
+    ctx.fillText(String(c), px, axisMarginTop - 3);
+  }
+
+  // Left axis (Y coordinates) — drawn in the left margin
+  // ASC grids: row 0 is the top, yllcorner is the bottom-left
+  // Y coordinate for row r center = yllcorner + (nrows - r - 0.5) * cellsize
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let r = firstRow; r < endRow; r += rowStep) {
+    if (r < 0) continue;
+    const py = axisMarginTop + r * cellSize - state.view.offsetY + cellSize * 0.5;
+    if (py < axisMarginTop - 2 || py > canvas.height + 2) continue;
+    ctx.fillText(String(r), axisMarginLeft - 4, py);
+  }
+
+  // Separator lines between axes and grid
+  ctx.strokeStyle = "#2a3446";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(axisMarginLeft, 0);
+  ctx.lineTo(axisMarginLeft, canvas.height);
+  ctx.moveTo(0, axisMarginTop);
+  ctx.lineTo(canvas.width, axisMarginTop);
+  ctx.stroke();
 }
 
 function renderAll() {
@@ -1237,6 +1342,181 @@ function renderAll() {
       return { patch, genom };
     }
 
+    function generateManualPatchIds() {
+      const { nrows, ncols } = state.landuse.header;
+      const patchData = Array.from({ length: nrows }, () => Array(ncols).fill(0));
+      const cellMap = state.manualPatch.cellMap;
+      for (const key in cellMap) {
+        const [r, c] = key.split(",").map(Number);
+        if (r < nrows && c < ncols) {
+          patchData[r][c] = cellMap[key];
+        }
+      }
+      const patch = {
+        header: { ...state.landuse.header },
+        data: patchData
+      };
+      return { patch };
+    }
+
+    function getManualPatchLanduse(patchId) {
+      const cellMap = state.manualPatch.cellMap;
+      for (const key in cellMap) {
+        if (cellMap[key] === patchId) {
+          const [r, c] = key.split(",").map(Number);
+          return getLanduseValue(r, c);
+        }
+      }
+      return null;
+    }
+
+    function resetManualPatch() {
+      state.manualPatch.cellMap = {};
+      state.manualPatch.nextId = 1;
+      state.manualPatch.activePatchId = null;
+    }
+
+    function initializeModeD(patchData) {
+      if (!patchData || !state.landuse) return;
+      
+      // Convert patch data to manual patch cell map
+      const cellMap = {};
+      let maxId = 0;
+      const { nrows, ncols } = state.landuse.header;
+      
+      for (let r = 0; r < nrows; r++) {
+        for (let c = 0; c < ncols; c++) {
+          const id = patchData[r][c];
+          if (id > 0) {
+            cellMap[`${r},${c}`] = id;
+            maxId = Math.max(maxId, id);
+          }
+        }
+      }
+      
+      state.manualPatch.cellMap = cellMap;
+      state.manualPatch.nextId = maxId + 1;
+      state.manualPatch.activePatchId = null;
+      state.manualPatch.initialized = true;
+      renumberManualPatchIdsRowMajor();
+    }
+
+    function getNextAvailableManualPatchId() {
+      const used = new Set(Object.values(state.manualPatch.cellMap).map(Number).filter(id => id > 0));
+      let id = 1;
+      while (used.has(id)) id += 1;
+      return id;
+    }
+
+    function renumberManualPatchIdsRowMajor() {
+      if (!state.landuse) return;
+      const { nrows, ncols } = state.landuse.header;
+      const cellMap = state.manualPatch.cellMap;
+      const mapping = new Map();
+      let nextId = 1;
+
+      for (let r = 0; r < nrows; r += 1) {
+        for (let c = 0; c < ncols; c += 1) {
+          const key = `${r},${c}`;
+          const oldId = Number(cellMap[key] || 0);
+          if (oldId <= 0) continue;
+          if (!mapping.has(oldId)) {
+            mapping.set(oldId, nextId);
+            nextId += 1;
+          }
+        }
+      }
+
+      for (const key in cellMap) {
+        const oldId = Number(cellMap[key] || 0);
+        if (oldId <= 0) {
+          delete cellMap[key];
+          continue;
+        }
+        cellMap[key] = mapping.get(oldId) || 0;
+      }
+
+      if (state.manualPatch.activePatchId != null) {
+        const mappedActive = mapping.get(Number(state.manualPatch.activePatchId));
+        state.manualPatch.activePatchId = mappedActive == null ? null : mappedActive;
+      }
+
+      state.manualPatch.nextId = nextId;
+    }
+
+    function handleManualPatchClick(event) {
+      if (!state.landuse) return;
+      if (state.settings.patchMode !== "D") return;
+      const cell = getCellFromCanvas(patchCanvas, event);
+      if (!cell) return;
+
+      const key = `${cell.row},${cell.col}`;
+      const cellMap = state.manualPatch.cellMap;
+      const landuseValue = getLanduseValue(cell.row, cell.col);
+
+      if (landuseValue === state.settings.nodata) return;
+
+      // Right-click: disconnect cell from its patch
+      if (event.button === 2) {
+        if (cellMap[key]) {
+          const removedId = cellMap[key];
+          delete cellMap[key];
+          // If no cells remain for that patch, deselect if active
+          const remaining = Object.values(cellMap).includes(removedId);
+          if (!remaining && state.manualPatch.activePatchId === removedId) {
+            state.manualPatch.activePatchId = null;
+          }
+          renumberManualPatchIdsRowMajor();
+          updateGenomPreview();
+          setStatus(patchStatus, `Cell (${cell.row}, ${cell.col}) disconnected from patch ${removedId}.`, "ok");
+        }
+        return;
+      }
+
+      // Left-click
+      if (event.button !== 0) return;
+
+      if (event.ctrlKey || event.metaKey) {
+        // Ctrl+click: add cell to the currently active patch
+        const activeId = state.manualPatch.activePatchId;
+        if (activeId == null) {
+          setStatus(patchStatus, "Click a cell first to start a patch, then Ctrl+click to add.", "error");
+          return;
+        }
+        // Check that this cell has the same landuse type as the active patch
+        const patchLanduse = getManualPatchLanduse(activeId);
+        if (patchLanduse !== landuseValue) {
+          setStatus(patchStatus, `Cannot add: cell landuse (${landuseValue}) differs from patch landuse (${patchLanduse}).`, "error");
+          return;
+        }
+        // If cell already belongs to another patch, remove it first
+        if (cellMap[key] && cellMap[key] !== activeId) {
+          delete cellMap[key];
+        }
+        cellMap[key] = activeId;
+        renumberManualPatchIdsRowMajor();
+        updateGenomPreview();
+        setStatus(patchStatus, `Cell (${cell.row}, ${cell.col}) added to patch ${activeId}.`, "ok");
+      } else {
+        // Plain click: select existing patch or start a new one
+        if (cellMap[key]) {
+          // Cell already has a patch — select that patch as active
+          state.manualPatch.activePatchId = cellMap[key];
+          renderAll();
+          setStatus(patchStatus, `Patch ${cellMap[key]} selected. Ctrl+click to add more cells of the same landuse type.`, "ok");
+        } else {
+          // Start a new patch with this cell
+          const newId = getNextAvailableManualPatchId();
+          state.manualPatch.nextId = newId + 1;
+          cellMap[key] = newId;
+          state.manualPatch.activePatchId = newId;
+          renumberManualPatchIdsRowMajor();
+          updateGenomPreview();
+          setStatus(patchStatus, `New patch started at (${cell.row}, ${cell.col}). Ctrl+click to add more cells.`, "ok");
+        }
+      }
+    }
+
     function buildGenomFromPatch(patchData) {
       const idMap = new Map();
       for (let r = 0; r < patchData.length; r += 1) {
@@ -1273,6 +1553,47 @@ function renderAll() {
           patchData[r][c] = mapping.get(id) || 0;
         }
       }
+    }
+
+    function normalizePatchIdsRowMajor(patchData) {
+      const mapping = new Map();
+      let nextId = 1;
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = Number(patchData[r][c] || 0);
+          if (id <= 0) continue;
+          if (!mapping.has(id)) {
+            mapping.set(id, nextId);
+            nextId += 1;
+          }
+        }
+      }
+      for (let r = 0; r < patchData.length; r += 1) {
+        for (let c = 0; c < patchData[0].length; c += 1) {
+          const id = Number(patchData[r][c] || 0);
+          if (id <= 0) continue;
+          patchData[r][c] = mapping.get(id) || 0;
+        }
+      }
+      return mapping;
+    }
+
+    function applyPatchIdMappingToManualState(mapping) {
+      const cellMap = state.manualPatch.cellMap;
+      for (const key in cellMap) {
+        const oldId = Number(cellMap[key] || 0);
+        const newId = mapping.get(oldId) || 0;
+        if (newId <= 0) {
+          delete cellMap[key];
+        } else {
+          cellMap[key] = newId;
+        }
+      }
+      if (state.manualPatch.activePatchId != null) {
+        const mappedActive = mapping.get(Number(state.manualPatch.activePatchId));
+        state.manualPatch.activePatchId = mappedActive == null ? null : mappedActive;
+      }
+      state.manualPatch.nextId = mapping.size + 1;
     }
 
     function applyEradication(patchData, genom) {
@@ -1336,6 +1657,7 @@ function renderAll() {
       let genom = precomputedGenom;
       let patchHeader = null;
       const useUploadedPatch = state.settings.patchMode === "U";
+      const useManualPatch = state.settings.patchMode === "D";
       if (useUploadedPatch) {
         if (!state.patchRaw) {
           setStatus(patchStatus, "No patch file uploaded for 'Fixed by Upload'.", "error");
@@ -1343,6 +1665,10 @@ function renderAll() {
         }
         patchData = state.patchRaw.data;
         patchHeader = state.patchRaw.header;
+      } else if (useManualPatch) {
+        const computed = generateManualPatchIds();
+        patchData = computed.patch.data;
+        patchHeader = computed.patch.header;
       } else {
         const computed = state.settings.patchMode === "A"
           ? generateSequentialPatchIds()
@@ -1350,6 +1676,9 @@ function renderAll() {
         patchData = computed.patch.data;
         genom = computed.genom;
         patchHeader = computed.patch.header;
+        
+        // Store computed patch data for potential Mode D initialization
+        state.manualPatch.lastComputedData = patchData;
       }
 
       if (!genom) {
@@ -1364,12 +1693,19 @@ function renderAll() {
       const patchCopy = patchData.map(row => row.slice());
       const eradicated = applyEradication(patchCopy, genom.slice());
 
+      if (useManualPatch) {
+        const mapping = normalizePatchIdsRowMajor(eradicated.patchData);
+        applyPatchIdMappingToManualState(mapping);
+      } else {
+        normalizePatchIds(eradicated.patchData);
+      }
+
       const genomResult = buildGenomFromPatch(eradicated.patchData);
       if (genomResult.error) {
         setStatus(genomStatus, genomResult.error, "error");
         return;
       }
-      normalizePatchIds(eradicated.patchData);
+
       state.patch = { header: { ...patchHeader }, data: eradicated.patchData };
       const normalizedGenom = genomResult.genom;
       const ids = normalizedGenom.map((_, idx) => idx + 1);
@@ -1554,14 +1890,20 @@ function renderAll() {
       renderAll();
     }
 
-    function updateTooltip(tooltip, cell) {
+    function updateTooltip(tooltip, cell, isPatchCanvas) {
       if (!cell) {
         tooltip.classList.remove("visible");
         return;
       }
       const landuseValue = getLanduseValue(cell.row, cell.col);
       const name = landuseValue === state.settings.nodata ? "NODATA" : state.typeNames[landuseValue] || `Type ${landuseValue}`;
-      tooltip.textContent = name;
+      let text = name;
+      if (isPatchCanvas && state.settings.patchMode === "D") {
+        const key = `${cell.row},${cell.col}`;
+        const patchId = state.manualPatch.cellMap[key];
+        text = patchId ? `${name} | Patch ${patchId}` : `${name} | No patch`;
+      }
+      tooltip.textContent = text;
       tooltip.style.left = `${cell.x}px`;
       tooltip.style.top = `${cell.y}px`;
       tooltip.classList.add("visible");
@@ -1688,8 +2030,8 @@ function renderAll() {
       event.preventDefault();
       if (!state.landuse) return;
       const rect = event.currentTarget.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const x = event.clientX - rect.left - axisMarginLeft;
+      const y = event.clientY - rect.top - axisMarginTop;
       const oldScale = state.view.scale;
       const delta = event.deltaY < 0 ? 1.1 : 0.9;
       const newScale = Math.min(maxScale, Math.max(minScale, oldScale * delta));
@@ -1709,6 +2051,16 @@ function renderAll() {
       landuseCanvas.addEventListener("wheel", handleCanvasWheel);
       landuseCanvas.addEventListener("contextmenu", event => event.preventDefault());
       patchCanvas.addEventListener("mousedown", event => {
+        if (state.settings.patchMode === "D") {
+          // In Mode D: shift to pan, left/right click for manual patching
+          if (event.shiftKey) {
+            isPanning = true;
+            lastPan = { x: event.clientX, y: event.clientY };
+            return;
+          }
+          handleManualPatchClick(event);
+          return;
+        }
         if (event.button === 2 || event.shiftKey) {
           isPanning = true;
           lastPan = { x: event.clientX, y: event.clientY };
@@ -1716,7 +2068,7 @@ function renderAll() {
       });
       patchCanvas.addEventListener("mousemove", event => {
         const cell = getCellFromCanvas(patchCanvas, event);
-        updateTooltip(patchTooltip, cell);
+        updateTooltip(patchTooltip, cell, true);
         if (isPanning && lastPan) {
           const dx = event.clientX - lastPan.x;
           const dy = event.clientY - lastPan.y;
@@ -1767,7 +2119,43 @@ function renderAll() {
     });
     document.getElementById("patch-mode").addEventListener("change", event => {
       state.settings.patchMode = event.target.value;
+      const helpEl = document.getElementById("patch-mode-help");
+      const resetBtn = document.getElementById("patch-reset");
+      
+      if (event.target.value === "D") {
+        patchCanvas.style.cursor = "pointer";
+        helpEl.textContent = "Click to start a patch. Ctrl+click to add same landuse cells. Right-click to disconnect cells. Shift+drag to pan. Use Reset to start over with Mode A output.";
+        resetBtn.style.display = "inline-block";
+        
+        // Initialize Mode D with current patch data if not already initialized
+        if (!state.manualPatch.initialized) {
+          const initData = state.manualPatch.lastComputedData || (state.patch ? state.patch.data : null);
+          if (initData) {
+            initializeModeD(initData);
+            setStatus(patchStatus, "Mode D: Initialized with current patch data.", "ok");
+          } else {
+            setStatus(patchStatus, "Mode D: Manual patching enabled.", "ok");
+          }
+        } else {
+          setStatus(patchStatus, "Mode D: Manual patching enabled.", "ok");
+        }
+      } else {
+        patchCanvas.style.cursor = "crosshair";
+        helpEl.textContent = "";
+        resetBtn.style.display = "none";
+        state.manualPatch.activePatchId = null;
+      }
       updateGenomPreview();
+    });
+
+    document.getElementById("patch-reset").addEventListener("click", () => {
+      if (state.settings.patchMode !== "D") return;
+      
+      // Reset to Mode A output (all cells as individual patches)
+      const modeA = generateSequentialPatchIds();
+      initializeModeD(modeA.patch.data);
+      updateGenomPreview();
+      setStatus(patchStatus, "Mode D: Reset to Mode A (all cells as individual patches).", "ok");
     });
     document.getElementById("landuse-fill").addEventListener("click", () => {
       if (!state.landuse) return;
